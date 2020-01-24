@@ -14,7 +14,7 @@ func main() {
 	for _, arg := range os.Args {
 		if arg == "-h" || arg == "help" || arg == "--help" {
 			fmt.Printf(`
-go-json server v1.0
+go-json server v1.2
 
 Serves json files in a RESTful manner.
 Arguments:
