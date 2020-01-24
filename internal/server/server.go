@@ -96,7 +96,10 @@ func (s Server) getCollectionData(r Route, writer http.ResponseWriter, req *http
 	if s.Pagination.Enabled {
 		p, err := getPageRequest(s.Pagination, req)
 		if err != nil {
-			return nil, err
+			return json.Marshal(Error{
+				Status: 400,
+				Message: err.Error(),
+			})
 		}
 		page, err := r.getPage(p)
 		if err != nil {

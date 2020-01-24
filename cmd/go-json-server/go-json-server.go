@@ -64,6 +64,9 @@ func parseArgs(args []string) server.Server {
 		case "--paginated":
 			opts.Pagination.Enabled = true
 			i += 1
+		case "--page-one-indexed":
+			opts.Pagination.ZeroIndexed = false
+			i += 1
 		case "--page-request-location":
 			assertArgCount(args, i, 1)
 			opts.Pagination.RequestParametersLocation = args[i+1]

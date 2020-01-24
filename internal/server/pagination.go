@@ -8,12 +8,12 @@ import (
 )
 
 type (
-
 	PaginationOptions struct {
 		Enabled                    bool
 		RequestParametersLocation  string // header, query-param
 		ResponseParametersLocation string // header, body
 		DefaultPageSize            int
+		ZeroIndexed                bool
 	}
 
 	page struct {
@@ -28,8 +28,9 @@ type (
 	}
 
 	pageRequest struct {
-		page int
-		size int
+		page    int
+		size    int
+		options PaginationOptions
 	}
 )
 
@@ -42,6 +43,7 @@ var DefaultPagination = PaginationOptions{
 	RequestParametersLocation:  LocationQueryParam,
 	ResponseParametersLocation: LocationBody,
 	DefaultPageSize:            20,
+	ZeroIndexed:                true,
 }
 
 func (p *page) writeHeaders(header http.Header) {
@@ -56,9 +58,14 @@ func (p *page) writeHeaders(header http.Header) {
 
 func paginate(data []interface{}, req pageRequest) page {
 
-	var content []interface{}
+	content := make([]interface{}, 0)
 
-	start := req.page * req.size
+	requestedPage := req.page
+	if !req.options.ZeroIndexed {
+		requestedPage -= 1
+	}
+
+	start := requestedPage * req.size
 	if start < len(data) {
 		end := start + req.size
 		if end > len(data) {
@@ -68,8 +75,8 @@ func paginate(data []interface{}, req pageRequest) page {
 	}
 
 	totalPages := int(math.Ceil(float64(len(data)) / float64(req.size)))
-	first := req.page == 0
-	last := req.page == (totalPages-1) || totalPages == 0
+	first := requestedPage == 0
+	last := requestedPage == (totalPages-1) || totalPages == 0
 
 	return page{
 		TotalPages:       totalPages,
@@ -84,6 +91,8 @@ func paginate(data []interface{}, req pageRequest) page {
 }
 
 func getPageRequest(opts PaginationOptions, req *http.Request) (p pageRequest, err error) {
+	p.options = opts
+
 	var pageStr, sizeStr string
 	if opts.RequestParametersLocation == LocationQueryParam {
 		queries := req.URL.Query()
@@ -109,6 +118,9 @@ func getPageRequest(opts PaginationOptions, req *http.Request) (p pageRequest, e
 	} else {
 		p.size = opts.DefaultPageSize
 	}
+
+	if !opts.ZeroIndexed && p.page == 0 {
+		return p, fmt.Errorf("invalid 'page' parameter [%s]", pageStr)
+	}
 	return p, nil
 }
-
