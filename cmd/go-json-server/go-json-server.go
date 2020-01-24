@@ -22,6 +22,7 @@ Arguments:
   --route PATH FILE: add a route under the PATH serving the json in FILE
   --base-path PATH: prepend every route with PATH
   --paginated: paginate responses (default false)
+  --page-one-indexed: pages start at 1 (default 0)
   --page-request-location LOCATION: where to find page params 'page' and 'size', either 'query-param' or 'header'
   --page-response-location LOCATION: where to send page attributes, either 'body' or 'header'
   --default-page-size SIZE: default pagination size (default to 20)
