@@ -44,6 +44,16 @@ var DefaultPagination = PaginationOptions{
 	DefaultPageSize:            20,
 }
 
+func (p *page) writeHeaders(header http.Header) {
+	header.Set("page-total-pages", strconv.Itoa(p.TotalPages))
+	header.Set("page-total-elements", strconv.Itoa(p.TotalElements))
+	header.Set("page-number-of-elements", strconv.Itoa(p.NumberOfElements))
+	header.Set("page-first", strconv.FormatBool(p.First))
+	header.Set("page-last", strconv.FormatBool(p.First))
+	header.Set("page-size", strconv.Itoa(p.Size))
+	header.Set("page-number", strconv.Itoa(p.Number))
+}
+
 func paginate(data []interface{}, req pageRequest) page {
 
 	var content []interface{}

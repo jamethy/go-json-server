@@ -46,7 +46,7 @@ func (s Server) createCollectionHandler(r Route) http.HandlerFunc {
 	return func(writer http.ResponseWriter, req *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 
-		data, err := s.getCollectionData(r, req)
+		data, err := s.getCollectionData(r, writer, req)
 
 		if err != nil {
 			err = s.writeError(writer, Error{
@@ -91,7 +91,7 @@ func (s Server) writeError(writer http.ResponseWriter, e Error) error {
 	return err
 }
 
-func (s Server) getCollectionData(r Route, req *http.Request) ([]byte, error) {
+func (s Server) getCollectionData(r Route, writer http.ResponseWriter, req *http.Request) ([]byte, error) {
 
 	if s.Pagination.Enabled {
 		p, err := getPageRequest(s.Pagination, req)
@@ -102,7 +102,12 @@ func (s Server) getCollectionData(r Route, req *http.Request) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(page)
+		if s.Pagination.ResponseParametersLocation == LocationHeader {
+			page.writeHeaders(writer.Header())
+			return json.Marshal(page.Content)
+		} else {
+			return json.Marshal(page)
+		}
 	} else {
 		return r.getRawData()
 	}
