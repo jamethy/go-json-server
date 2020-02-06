@@ -11,6 +11,7 @@ type (
 	Route struct {
 		Path     string
 		JsonFile string
+		Plain    bool
 	}
 )
 
