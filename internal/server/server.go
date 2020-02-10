@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -29,9 +30,9 @@ func (s Server) Start() {
 
 	for _, route := range s.Routes {
 
-		if route.Plain {
+		if route.Raw {
 			// get raw json data
-			mux.HandleFunc(s.BasePath+route.Path, s.createPlainHandler(route))
+			mux.HandleFunc(s.BasePath+route.Path, s.createRawHandler(route))
 
 		} else {
 			// get all of route
@@ -50,36 +51,24 @@ func (s Server) Start() {
 	}
 }
 
-func (s Server) fakeLoad(req *http.Request) {
-	fakeLoad := s.FakeLoad
-
-	sleep := req.URL.Query().Get("sleep")
-	if sleep != "" {
-		fakeLoad, _ = time.ParseDuration(sleep)
-	}
-
-	if fakeLoad > 0 {
-		logDebug(fmt.Sprintf("Sleeping for %v seconds for fake load", fakeLoad))
-		time.Sleep(fakeLoad)
-	}
-}
-
-func (s Server) createPlainHandler(r Route) http.HandlerFunc {
+func (s Server) createRawHandler(r Route) http.HandlerFunc {
 	return func(writer http.ResponseWriter, req *http.Request) {
-		s.fakeLoad(req)
-		writer.Header().Set("Content-Type", "application/json")
+		if req.Method != http.MethodOptions {
+			s.fakeLoad(req)
+			writer.Header().Set("Content-Type", "application/json")
 
-		data, err := r.getRawData()
-		if err != nil {
-			err = s.writeError(writer, Error{
-				Status:  500,
-				Message: fmt.Sprintf("Internal server error %v", err),
-			})
-		} else if data != nil {
-			_, err = writer.Write(data)
-		}
-		if err != nil {
-			logError(fmt.Sprintf("error writing data: %v", err))
+			data, err := r.getRawData()
+			if err != nil {
+				err = s.writeError(writer, Error{
+					Status:  500,
+					Message: fmt.Sprintf("Internal server error %v", err),
+				})
+			} else if data != nil {
+				_, err = writer.Write(data)
+			}
+			if err != nil {
+				logError(fmt.Sprintf("error writing data: %v", err))
+			}
 		}
 	}
 }
@@ -89,39 +78,69 @@ func (s Server) createCollectionHandler(r Route) http.HandlerFunc {
 		s.fakeLoad(req)
 		writer.Header().Set("Content-Type", "application/json")
 
-		data, err := s.getCollectionData(r, writer, req)
+		var err error
+		if req.Method == http.MethodOptions {
+
+		} else if req.Method == http.MethodGet {
+			err = s.handleCollectionGet(r, writer, req)
+
+		} else if req.Method == http.MethodPost {
+			err = s.handleCollectionUpdate(writer, req, r.addDataItem)
+
+		} else if req.Method == http.MethodPut {
+			err = s.handleCollectionUpdate(writer, req, r.putDataItem)
+
+		} else if req.Method == http.MethodPatch {
+			err = s.handleCollectionUpdate(writer, req, r.patchDataItem)
+
+		} else {
+			err = s.writeError(writer, Error{
+				Status:  405,
+				Message: fmt.Sprintf("Method Not Allowed"),
+			})
+		}
 
 		if err != nil {
 			err = s.writeError(writer, Error{
 				Status:  500,
 				Message: fmt.Sprintf("Internal server error %v", err),
 			})
-		} else if data != nil {
-			_, err = writer.Write(data)
-		}
-		if err != nil {
-			logError(fmt.Sprintf("error writing data: %v", err))
+			if err != nil {
+				logError(fmt.Sprintf("error writing data: %v", err))
+			}
 		}
 	}
 }
 
 func (s Server) createItemHandler(r Route) http.HandlerFunc {
 	return func(writer http.ResponseWriter, req *http.Request) {
-		s.fakeLoad(req)
-		writer.Header().Set("Content-Type", "application/json")
+		var writingError error
+		if req.Method == http.MethodOptions {
+			return
+		}
 
-		data, err := s.getItemData(r, req)
-
-		if err != nil {
-			_ = s.writeError(writer, Error{
-				Status:  500,
-				Message: fmt.Sprintf("Internal server error %v", err),
+		if req.Method != http.MethodGet {
+			writingError = s.writeError(writer, Error{
+				Status:  405,
+				Message: fmt.Sprintf("Method Not Allowed"),
 			})
 		} else {
-			_, err = writer.Write(data)
+			s.fakeLoad(req)
+			writer.Header().Set("Content-Type", "application/json")
+
+			data, err := s.getItemData(r, req)
+
 			if err != nil {
-				logError(fmt.Sprintf("error writing data: %v", err))
+				writingError = s.writeError(writer, Error{
+					Status:  500,
+					Message: fmt.Sprintf("Internal server error %v", err),
+				})
+			} else {
+				_, writingError = writer.Write(data)
 			}
+		}
+		if writingError != nil {
+			logError(fmt.Sprintf("error writing data: %v", writingError))
 		}
 	}
 }
@@ -175,8 +194,61 @@ func (s Server) getItemData(r Route, req *http.Request) ([]byte, error) {
 	})
 }
 
+func (s Server) handleCollectionGet(r Route, writer http.ResponseWriter, req *http.Request) error {
+	data, err := s.getCollectionData(r, writer, req)
+	if err != nil {
+		return err
+	} else if data != nil {
+		_, err = writer.Write(data)
+	}
+	return err
+}
+
+type updaterFunc func(item map[string]interface{}) (map[string]interface{}, error)
+
+func (s Server) handleCollectionUpdate(writer http.ResponseWriter, req *http.Request, updater updaterFunc) error {
+	item, err := getWholeBodyAsObject(req)
+	if err != nil {
+		return err
+	}
+	item, err = updater(item)
+	if err != nil {
+		return err
+	}
+
+	b, _ := json.Marshal(item)
+	_, err = writer.Write(b)
+	return err
+}
+
 func logClose(c io.Closer) {
 	if err := c.Close(); err != nil {
 		log.Printf("close error: %v", err)
 	}
+}
+
+func (s Server) fakeLoad(req *http.Request) {
+	fakeLoad := s.FakeLoad
+
+	sleep := req.URL.Query().Get("sleep")
+	if sleep != "" {
+		fakeLoad, _ = time.ParseDuration(sleep)
+	}
+
+	if fakeLoad > 0 {
+		logDebug(fmt.Sprintf("Sleeping for %v seconds for fake load", fakeLoad))
+		time.Sleep(fakeLoad)
+	}
+}
+
+func getWholeBodyAsObject(req *http.Request) (map[string]interface{}, error) {
+	b, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	logClose(req.Body)
+
+	item := make(map[string]interface{})
+	err = json.Unmarshal(b, &item)
+	return item, err
 }

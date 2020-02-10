@@ -21,7 +21,7 @@ Serves json files in a RESTful manner.
 Arguments:
   --port PORT_NUMBER: which port to serve on
   --route PATH FILE: add a route under the PATH serving the json in FILE
-  --plain-route PATH FILE: add a route under the PATH serving the json in FILE directly
+  --raw-route PATH FILE: add a route under the PATH serving the json in FILE directly
   --base-path PATH: prepend every route with PATH
   --paginated: paginate responses (default false)
   --page-one-indexed: pages start at 1 (default 0)
@@ -62,14 +62,15 @@ func parseArgs(args []string) server.Server {
 			opts.Routes = append(opts.Routes, server.Route{
 				Path:     args[i+1],
 				JsonFile: args[i+2],
+				IdField:  "id",
 			})
 			i += 3
-		case "--plain-route":
+		case "--raw-route":
 			assertArgCount(args, i, 2)
 			opts.Routes = append(opts.Routes, server.Route{
 				Path:     args[i+1],
 				JsonFile: args[i+2],
-				Plain:    true,
+				Raw:      true,
 			})
 			i += 3
 		case "--base-path":

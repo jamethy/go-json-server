@@ -1,7 +1,8 @@
 [
   {
     "id": 1,
-    "name": "James Burns"
+    "name": "James Burns",
+    "other": "new second field"
   },
   {
     "id": 2,
